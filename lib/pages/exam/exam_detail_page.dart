@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../providers/exam_provider.dart';
-import 'exam_subject_detail_page.dart';
+import 'answer_sheet_page.dart';
 
 class ExamDetailPage extends StatefulWidget {
   final String examId;
@@ -19,8 +19,28 @@ class _ExamDetailPageState extends State<ExamDetailPage> {
     super.initState();
     // 使用 addPostFrameCallback 避免在 build 阶段调用 notifyListeners
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ExamProvider>().loadExamDetail(widget.examId);
+      final provider = context.read<ExamProvider>();
+      provider.loadExamDetail(widget.examId);
+      provider.loadSubjectExtras(widget.examId);
     });
+  }
+
+  /// 分数显示: 有小数保留小数(331.5/84.5), 整数不带 .0(87/332)
+  String _fmt(dynamic v) {
+    if (v == null) return '-';
+    if (v is num) return v % 1 == 0 ? v.toStringAsFixed(0) : v.toString();
+    final d = double.tryParse(v.toString());
+    if (d == null) return '-';
+    return d % 1 == 0 ? d.toStringAsFixed(0) : d.toString();
+  }
+
+  Map<String, dynamic>? _essayOf(Map<String, dynamic>? extra) {
+    if (extra == null) return null;
+    final ar = extra['ai_essay_report'];
+    if (ar is Map && ar['essayThInfo'] is Map) {
+      return (ar['essayThInfo'] as Map).cast<String, dynamic>();
+    }
+    return null;
   }
 
   @override
@@ -50,21 +70,21 @@ class _ExamDetailPageState extends State<ExamDetailPage> {
                         const Text('总分', style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
                         const SizedBox(height: 8),
                         Text(
-                          exam.studentScore?.toStringAsFixed(0) ?? '-',
+                          _fmt(exam.studentScore),
                           style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
                         ),
                         Text(
-                          '满分 ${exam.totalScore?.toStringAsFixed(0) ?? '-'}',
+                          '满分 ${_fmt(exam.totalScore)}',
                           style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
                         ),
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildStatItem('班级排名', exam.classRank?.toStringAsFixed(0) ?? '-'),
-                            _buildStatItem('年级排名', exam.gradeRank?.toStringAsFixed(0) ?? '-'),
-                            _buildStatItem('班级平均', exam.classAvg?.toStringAsFixed(0) ?? '-'),
-                            _buildStatItem('年级平均', exam.gradeAvg?.toStringAsFixed(0) ?? '-'),
+                            _buildStatItem('班级排名', _fmt(exam.classRank)),
+                            _buildStatItem('年级排名', _fmt(exam.gradeRank)),
+                            _buildStatItem('班级平均', _fmt(exam.classAvg)),
+                            _buildStatItem('年级平均', _fmt(exam.gradeAvg)),
                           ],
                         ),
                       ],
@@ -79,6 +99,8 @@ class _ExamDetailPageState extends State<ExamDetailPage> {
                 if (exam.subjects != null && exam.subjects!.isNotEmpty)
                   ...exam.subjects!.asMap().entries.map((entry) {
                     final subject = entry.value;
+                    final essay = _essayOf(
+                        provider.subjectExtra(widget.examId, subject.subjectName));
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
@@ -93,13 +115,23 @@ class _ExamDetailPageState extends State<ExamDetailPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${subject.score?.toStringAsFixed(0) ?? '-'} / ${subject.fullScore?.toStringAsFixed(0) ?? '-'}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              '${_fmt(subject.score)} / ${_fmt(subject.fullScore)}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            if (subject.classAvg != null)
+                            if (subject.grade != null)
                               Text(
-                                '班级平均: ${subject.classAvg!.toStringAsFixed(1)}',
-                                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                '等级: ${subject.grade}',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary),
+                              ),
+                            if (essay != null)
+                              Text(
+                                '作文 ${_fmt(essay['score'])}/${_fmt(essay['full'])} · '
+                                '班级均分 ${_fmt(essay['avg'])} · 最高 ${_fmt(essay['max'])}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppTheme.primaryColor),
                               ),
                           ],
                         ),
@@ -108,10 +140,10 @@ class _ExamDetailPageState extends State<ExamDetailPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ExamSubjectDetailPage(
-                                examId: exam.examId,
+                              builder: (_) => AnswerSheetPage(
+                                examId: widget.examId,
                                 examName: exam.examName,
-                                subjectName: subject.subjectName,
+                                km: subject.subjectName,
                               ),
                             ),
                           );

@@ -16,6 +16,15 @@ class DioClient {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   static const String _tokenKey = 'auth_token';
   String? _memToken; // 内存token缓存，secure storage不可用时保证会话可用
+  DateTime? _lastUnauthorizedAt;
+
+  /// 登录态失效回调(HTTP 401 或业务status 401), 由 AuthProvider 注册:
+  /// 清理会话并提示"账号可能在其他设备登录"
+  static void Function(String message)? onUnauthorized;
+
+  /// 401 静默重登: AuthProvider 注册, 用保存的密码重登并返回新 token;
+  /// 返回 null 则走 onUnauthorized 弹窗
+  static Future<String?> Function()? reloginProvider;
 
   DioClient._internal();
   static final DioClient _instance = DioClient._internal();
@@ -70,6 +79,10 @@ class DioClient {
         // 解密响应体: data.isEncrypt==true → AES解密 content
         try {
           final data = response.data;
+          if (data is Map && data['status'] == 401) {
+            // 业务层登录态失效(账号在其他设备登录/被顶号)
+            _fireUnauthorized(data['message']?.toString() ?? '');
+          }
           if (data is Map && data['data'] is Map) {
             final inner = data['data'] as Map;
             if (inner['isEncrypt'] == true && inner['content'] != null) {
@@ -94,12 +107,56 @@ class DioClient {
         }
         handler.next(response);
       },
-      onError: (error, handler) {
-        logger.warn(
-            'HTTP', '✗ ${error.response?.statusCode} ${error.requestOptions.path}: ${error.message}');
-        handler.next(error);
-      },
-    ));
+        onError: (error, handler) async {
+          final code = error.response?.statusCode;
+          final path = error.requestOptions.path;
+          // 401 静默重登: 用保存的密码重登拿新 token 后原请求重放一次
+          if (code == 401 &&
+              error.requestOptions.extra['__retried'] != true &&
+              reloginProvider != null) {
+            logger.warn('HTTP', '401, 尝试静默重登后重放: $path');
+            String? newToken;
+            try {
+              newToken = await reloginProvider!();
+            } catch (e) {
+              logger.warn('HTTP', '静默重登异常: $e');
+            }
+            if (newToken != null && newToken.isNotEmpty) {
+              final opts = error.requestOptions;
+              opts.extra['__retried'] = true;
+              opts.headers['Token'] = newToken;
+              try {
+                final resp = await _dio.fetch(opts);
+                logger.debug('HTTP', '静默重登后重试成功: $path');
+                return handler.resolve(resp);
+              } catch (e) {
+                logger.warn('HTTP', '重放仍失败: $e');
+              }
+            }
+          }
+          if (code == 401) {
+            _fireUnauthorized(error.response?.data is Map
+                ? (error.response!.data['message']?.toString() ?? '')
+                : '');
+          }
+          logger.warn(
+              'HTTP', '✗ ${error.response?.statusCode} ${error.requestOptions.path}: ${error.message}');
+          handler.next(error);
+        },
+      ));
+  }
+
+  /// 登录态失效(5秒去重): 清token并通知UI层提示
+  void _fireUnauthorized(String message) {
+    final now = DateTime.now();
+    if (_lastUnauthorizedAt != null &&
+        now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastUnauthorizedAt = now;
+    logger.warn('HTTP', '登录态失效: $message');
+    clearToken();
+    onUnauthorized?.call(message);
   }
 
   /// 登录(表单)并保存token
@@ -409,25 +466,31 @@ class DioClient {
   }
 
   /// 成绩详情 (请求侧GCM加密): POST Question/ScoreReport
+  /// 官方JS实参: {examGuid, schoolGuid, grade:currentGrade, schoolRuCode:ruCode, km:科目名("总分"=全科)}
   /// 响应 GCM 加密，由拦截器自动解密。bn=iv, bp=加密请求参数, bk已由拦截器自动添加。
   Future<Map<String, dynamic>?> getScoreReport({
     required String examGuid,
     required String schoolGuid,
     required String grade,
+    required String ruCode,
+    String km = '总分',
   }) async {
     try {
       // 冷启动后会话密钥可能丢失，确保有效
       await _ensureSessionKey();
-      
+
       final iv = SecureCrypto.generateIv();
       final ivBytes = base64.decode(iv);
-      final params = jsonEncode({
-        'examGuid': examGuid,
-        'schoolGuid': schoolGuid,
-        'grade': grade,
-      });
-      logger.debug('HTTP', 'ScoreReport bp 明文: $params');
-      final bp = SecureCrypto.aesGcmEncrypt(params, ivBytes);
+      // 官方加密payload格式(非JSON!): "k=v;k=v" 分号连接, 见原App septnetlive aesEncrypt
+      final pairs = [
+        'examGuid=$examGuid',
+        'schoolGuid=$schoolGuid',
+        'grade=$grade',
+        'schoolRuCode=$ruCode',
+        'km=$km',
+      ];
+      logger.debug('HTTP', 'ScoreReport bp 明文: ${pairs.join(';')}');
+      final bp = SecureCrypto.aesGcmEncrypt(pairs.join(';'), ivBytes);
       final resp = await _dio.post(
         '${ApiConfig.baseScore}${ApiConfig.questionScoreReport}',
         options: Options(headers: {
@@ -449,10 +512,13 @@ class DioClient {
   }
 
   /// 获取单科列表 (请求侧GCM加密): POST Question/Subjects
-  Future<List<Map<String, dynamic>>?> getSubjects({
+  /// 官方JS实参: {examGuid, schoolGuid, grade:currentGrade, schoolRuCode:ruCode}
+  /// 返回完整结构 {list:[...], exam_info:{...}}
+  Future<Map<String, dynamic>?> getSubjects({
     required String examGuid,
     required String schoolGuid,
     required String grade,
+    required String ruCode,
   }) async {
     try {
       // 冷启动后会话密钥可能丢失，确保有效
@@ -460,13 +526,15 @@ class DioClient {
 
       final iv = SecureCrypto.generateIv();
       final ivBytes = base64.decode(iv);
-      final params = jsonEncode({
-        'examGuid': examGuid,
-        'schoolGuid': schoolGuid,
-        'grade': grade,
-      });
-      logger.debug('HTTP', 'Subjects bp 明文: $params');
-      final bp = SecureCrypto.aesGcmEncrypt(params, ivBytes);
+      // 官方加密payload格式(非JSON!): "k=v;k=v" 分号连接
+      final pairs = [
+        'examGuid=$examGuid',
+        'schoolGuid=$schoolGuid',
+        'grade=$grade',
+        'schoolRuCode=$ruCode',
+      ];
+      logger.debug('HTTP', 'Subjects bp 明文: ${pairs.join(';')}');
+      final bp = SecureCrypto.aesGcmEncrypt(pairs.join(';'), ivBytes);
       final resp = await _dio.post(
         '${ApiConfig.baseScore}${ApiConfig.questionSubjects}',
         options: Options(
@@ -478,16 +546,61 @@ class DioClient {
         ),
       );
       final d = _dataOf(resp.data);
+      // 返回完整结构 {list:[...], exam_info:{...}}: responseGuid 在 list 条目上,
+      // ruleHash 在 exam_info 上, 答题卡接口都需要
       if (d is Map) {
         final list = d['list'];
-        if (list is List) {
-          logger.debug('HTTP', 'Subjects 解密字段: ${list.length} 个科目');
-          return list.cast<Map<String, dynamic>>();
-        }
+        logger.debug('HTTP', 'Subjects 解析字段: ${list is List ? list.length : 0} 个科目, exam_info: ${d['exam_info']?.keys.toList()}');
+        return d.cast<String, dynamic>();
       }
       return null;
     } catch (e) {
-      logger.error('HTTP', 'getSubjects 失败', e);
+      logger.error('HTTP', '获取单科列表失败', e);
+      return null;
+    }
+  }
+
+  /// 获取答题卡图片地址 (请求侧GCM加密): POST Question/AnswerCardUrl
+  /// 官方JS实参: {examGuid, responseGuid, schoolGuid, grade, ruleHash,
+  ///              isWatermark:false, schoolRuCode}
+  Future<Map<String, dynamic>?> getAnswerCardUrl({
+    required String examGuid,
+    required String responseGuid,
+    required String schoolGuid,
+    required String grade,
+    required String ruleHash,
+    required String ruCode,
+  }) async {
+    try {
+      await _ensureSessionKey();
+
+      final iv = SecureCrypto.generateIv();
+      final ivBytes = base64.decode(iv);
+      final pairs = [
+        'examGuid=$examGuid',
+        'responseGuid=$responseGuid',
+        'schoolGuid=$schoolGuid',
+        'grade=$grade',
+        'ruleHash=$ruleHash',
+        // 官方安卓端固定传 true: 服务端据此把得分标注层(红色每题得分/卷面
+        // 满分summary)烤进扫描图, 传 false 拿到的是无标注干净版
+        'isWatermark=true',
+        'schoolRuCode=$ruCode',
+      ];
+      logger.debug('HTTP', 'AnswerCardUrl bp 明文: ${pairs.join(';')}');
+      final bp = SecureCrypto.aesGcmEncrypt(pairs.join(';'), ivBytes);
+      final resp = await _dio.post(
+        '${ApiConfig.baseScore}${ApiConfig.questionAnswerCardUrl}',
+        options: Options(headers: {
+          'bn': iv,
+          'bp': bp,
+        }),
+      );
+      final d = _dataOf(resp.data);
+      logger.debug('HTTP', 'AnswerCardUrl 响应: $d');
+      return d is Map ? d.cast<String, dynamic>() : null;
+    } catch (e) {
+      logger.error('HTTP', '获取答题卡失败', e);
       return null;
     }
   }

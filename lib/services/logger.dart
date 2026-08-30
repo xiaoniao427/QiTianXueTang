@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 日志级别
 enum LogLevel {
@@ -31,11 +32,22 @@ class AppLogger {
   File? _logFile;
   IOSink? _sink;
   bool _initialized = false;
+  bool _fileEnabled = true;
+
+  /// 日志文件开关: release 默认关闭(成绩属个人数据), 设置页可开
+  bool get fileEnabled => _fileEnabled;
+  void setFileEnabled(bool v) => _fileEnabled = v;
 
   // ─── 初始化 ─────────────────────────────────────────────
   Future<void> init({LogLevel level = LogLevel.debug}) async {
     if (_initialized) return;
     _level = level;
+
+    // release 默认关闭文件日志(成绩属个人数据), 设置页可开
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _fileEnabled = prefs.getBool('debug_logging') ?? !kReleaseMode;
+    } catch (_) {}
 
     try {
       // 优先外部存储 (/storage/emulated/0/Android/data/<pkg>/files/)
@@ -92,8 +104,8 @@ class AppLogger {
         '${now.millisecond.toString().padLeft(3, '0')}';
     final line = '[$ts][$tag][$module] $message';
 
-    // 只输出到文件
-    if (_sink != null) {
+    // 只输出到文件(受开关控制)
+    if (_fileEnabled && _sink != null) {
       _sink!.writeln(line);
     }
   }
