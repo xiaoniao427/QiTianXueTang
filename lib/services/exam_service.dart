@@ -118,8 +118,9 @@ class ExamService {
       // raw 结构约定为 { list: [...], exam_info: {...} }，将 list 解析为 List<Map<String,dynamic>>
       final list = raw['list'];
       if (list is List) {
-        return list.map((e) {
-          if (e is Map) return (e as Map).cast<String, dynamic>();
+        return list.map<Map<String, dynamic>>((e) {
+          if (e is Map<String, dynamic>) return e;
+          if (e is Map) return Map<String, dynamic>.from(e);
           return <String, dynamic>{};
         }).toList();
       }
