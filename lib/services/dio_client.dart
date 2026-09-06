@@ -147,58 +147,6 @@ class DioClient {
         logger.debug('HTTP', '╚═══════════════════════════════════════════════');
         handler.next(response);
       },
- fix/exam-report-and-release-crash
-        onError: (error, handler) async {
-          final code = error.response?.statusCode;
-          final path = error.requestOptions.path;
-          // 401 静默重登: 用保存的密码重登拿新 token 后原请求重放一次
-          if (code == 401 &&
-              error.requestOptions.extra['__retried'] != true &&
-              reloginProvider != null) {
-            logger.warn('HTTP', '401, 尝试静默重登后重放: $path');
-            String? newToken;
-            try {
-              newToken = await reloginProvider!();
-            } catch (e) {
-              logger.warn('HTTP', '静默重登异常: $e');
-            }
-            if (newToken != null && newToken.isNotEmpty) {
-              final opts = error.requestOptions;
-              opts.extra['__retried'] = true;
-              opts.headers['Token'] = newToken;
-              try {
-                final resp = await _dio.fetch(opts);
-                logger.debug('HTTP', '静默重登后重试成功: $path');
-                return handler.resolve(resp);
-              } catch (e) {
-                logger.warn('HTTP', '重放仍失败: $e');
-              }
-            }
-          }
-          if (code == 401) {
-            _fireUnauthorized(error.response?.data is Map
-                ? (error.response!.data['message']?.toString() ?? '')
-                : '');
-          }
-          logger.warn(
-              'HTTP', '✗ ${error.response?.statusCode} ${error.requestOptions.path}: ${error.message}');
-          handler.next(error);
-        },
-      ));
-  }
-
-  /// 登录态失效(5秒去重): 清token并通知UI层提示
-  void _fireUnauthorized(String message) {
-    final now = DateTime.now();
-    if (_lastUnauthorizedAt != null &&
-        now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 5)) {
-      return;
-    }
-    _lastUnauthorizedAt = now;
-    logger.warn('HTTP', '登录态失效: $message');
-    clearToken();
-    onUnauthorized?.call(message);
-
 
       onError: (error, handler) async {
         final code = error.response?.statusCode;
@@ -237,7 +185,6 @@ class DioClient {
         handler.next(error);
       },
     ));
- main
   }
 
   /// 登录态失效(5秒去重): 清token并通知UI层提示
@@ -560,7 +507,6 @@ class DioClient {
   }
 
   /// 成绩详情 (请求侧GCM加密): POST Question/ScoreReport
-  /// 官方JS实参: {examGuid, schoolGuid, grade:currentGrade, schoolRuCode:ruCode, km:科目名("总分"=全科)}
   /// 响应 GCM 加密，由拦截器自动解密。bn=iv, bp=加密请求参数, bk已由拦截器自动添加。
   Future<Map<String, dynamic>?> getScoreReport({
     required String examGuid,
@@ -575,11 +521,7 @@ class DioClient {
 
       final iv = SecureCrypto.generateIv();
       final ivBytes = base64.decode(iv);
- fix/exam-report-and-release-crash
- fix/exam-report-and-release-crash
 
-
- main
       // 官方加密payload格式(非JSON!): "k=v;k=v" 分号连接, 见原App septnetlive aesEncrypt
       final pairs = [
         'examGuid=$examGuid',
@@ -591,18 +533,6 @@ class DioClient {
       logger.debug('HTTP', 'ScoreReport bp 明文: ${pairs.join(';')}');
       final bp = SecureCrypto.aesGcmEncrypt(pairs.join(';'), ivBytes);
 
- fix/exam-report-and-release-crash
-      final params = jsonEncode({
-        'examGuid': examGuid,
-        'schoolGuid': schoolGuid,
-        'grade': grade,
-      });
-      // 业务日志（可在拦截器中统一打印，这里保留用于调试）
-      logger.debug('HTTP', 'ScoreReport bp 明文: $params');
-      final bp = SecureCrypto.aesGcmEncrypt(params, ivBytes);
- main
-
- main
       final resp = await _dio.post(
         '${ApiConfig.baseScore}${ApiConfig.questionScoreReport}',
         options: Options(headers: {
@@ -628,95 +558,3 @@ class DioClient {
   /// 返回完整结构 {list:[...], exam_info:{...}}
   Future<Map<String, dynamic>?> getSubjects({
     required String examGuid,
- fix/exam-report-and-release-crash
-    required String schoolGuid,
-    required String grade,
-    required String ruCode,
-  }) async {
-    try {
-      // 冷启动后会话密钥可能丢失，确保有效
-      await _ensureSessionKey();
-
-      final iv = SecureCrypto.generateIv();
-      final ivBytes = base64.decode(iv);
-      // 官方加密payload格式(非JSON!): "k=v;k=v" 分号连接
-      final pairs = [
-        'examGuid=$examGuid',
-        'schoolGuid=$schoolGuid',
-        'grade=$grade',
-        'schoolRuCode=$ruCode',
-      ];
-      logger.debug('HTTP', 'Subjects bp 明文: ${pairs.join(';')}');
-      final bp = SecureCrypto.aesGcmEncrypt(pairs.join(';'), ivBytes);
-      final resp = await _dio.post(
-        '${ApiConfig.baseScore}${ApiConfig.questionSubjects}',
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: {
-            'bn': iv,
-            'bp': bp,
-          },
-        ),
-      );
-      final d = _dataOf(resp.data);
-      // 返回完整结构 {list:[...], exam_info:{...}}: responseGuid 在 list 条目上,
-      // ruleHash 在 exam_info 上, 答题卡接口都需要
-      if (d is Map) {
-        final list = d['list'];
-        logger.debug('HTTP', 'Subjects 解析字段: ${list is List ? list.length : 0} 个科目, exam_info: ${d['exam_info']?.keys.toList()}');
-        return d.cast<String, dynamic>();
-      }
-      return null;
-    } catch (e) {
-      logger.error('HTTP', '获取单科列表失败', e);
-      return null;
-    }
-  }
-
-  /// 获取答题卡图片地址 (请求侧GCM加密): POST Question/AnswerCardUrl
-  /// 官方JS实参: {examGuid, responseGuid, schoolGuid, grade, ruleHash,
-  ///              isWatermark:false, schoolRuCode}
-  Future<Map<String, dynamic>?> getAnswerCardUrl({
-    required String examGuid,
-    required String responseGuid,
-    required String schoolGuid,
-    required String grade,
-    required String ruleHash,
-    required String ruCode,
-  }) async {
-    try {
-      await _ensureSessionKey();
-
-      final iv = SecureCrypto.generateIv();
-      final ivBytes = base64.decode(iv);
-      final pairs = [
-        'examGuid=$examGuid',
-        'responseGuid=$responseGuid',
-        'schoolGuid=$schoolGuid',
-        'grade=$grade',
-        'ruleHash=$ruleHash',
-        // 官方安卓端固定传 true: 服务端据此把得分标注层(红色每题得分/卷面
-        // 满分summary)烤进扫描图, 传 false 拿到的是无标注干净版
-        'isWatermark=true',
-        'schoolRuCode=$ruCode',
-      ];
-      logger.debug('HTTP', 'AnswerCardUrl bp 明文: ${pairs.join(';')}');
-      final bp = SecureCrypto.aesGcmEncrypt(pairs.join(';'), ivBytes);
-      final resp = await _dio.post(
-        '${ApiConfig.baseScore}${ApiConfig.questionAnswerCardUrl}',
-        options: Options(headers: {
-          'bn': iv,
-          'bp': bp,
-        }),
-      );
-      final d = _dataOf(resp.data);
-      logger.debug('HTTP', 'AnswerCardUrl 响应: $d');
-      return d is Map ? d.cast<String, dynamic>() : null;
-    } catch (e) {
-      logger.error('HTTP', '获取答题卡失败', e);
-      return null;
-    }
-  }
-}
-
- main
