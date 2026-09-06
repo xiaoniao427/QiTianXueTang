@@ -29,24 +29,6 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-
-        <!-- MT 管理器文件提供器（无需 ROOT 管理私有目录） -->
-        <provider
-            android:name="bin.mt.file.content.MTDataFilesProvider"
-            android:authorities="${applicationId}.MTDataFilesProvider"
-            android:exported="true"
-            android:grantUriPermissions="true"
-            android:permission="android.permission.MANAGE_DOCUMENTS">
-            <intent-filter>
-                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
-            </intent-filter>
-        </provider>
-        <activity
-            android:name="bin.mt.file.content.MTDataFilesWakeUpActivity"
-            android:taskAffinity="${applicationId}.MTDataFilesWakeUp"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:noHistory="true" />
     </application>
     <queries>
         <intent>

@@ -5,6 +5,7 @@ import '../../providers/exam_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/exam_model.dart';
 import 'exam_detail_page.dart';
+import 'score_trend_page.dart';
 
 class ExamListPage extends StatefulWidget {
   const ExamListPage({super.key});
@@ -23,6 +24,7 @@ class _ExamListPageState extends State<ExamListPage> {
       context.read<ExamProvider>().updateContext(
             schoolGuid: user?.schoolGuid,
             grade: user?.grade,
+            ruCode: user?.ruCode,
           );
       final provider = context.read<ExamProvider>();
       if (user?.studentName != null) {
@@ -35,7 +37,19 @@ class _ExamListPageState extends State<ExamListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('考试成绩')),
+      appBar: AppBar(
+        title: const Text('考试成绩'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.insights),
+            tooltip: '成绩趋势',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ScoreTrendPage()),
+            ),
+          ),
+        ],
+      ),
       body: Consumer<ExamProvider>(
         builder: (context, examProvider, _) {
           if (examProvider.isLoading) {

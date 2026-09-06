@@ -111,6 +111,7 @@ class SubjectScore {
   final double? gradeAvg;
   final double? classRank;
   final double? gradeRank;
+  final String? grade;
 
   SubjectScore({
     required this.subjectName,
@@ -120,17 +121,35 @@ class SubjectScore {
     this.gradeAvg,
     this.classRank,
     this.gradeRank,
+    this.grade,
   });
 
   factory SubjectScore.fromJson(Map<String, dynamic> json) {
+    String _s(List keys) {
+      for (final k in keys) {
+        final v = json[k];
+        if (v != null && v.toString().isNotEmpty) return v.toString();
+      }
+      return '';
+    }
+    double? _d(List keys) {
+      for (final k in keys) {
+        final v = json[k];
+        if (v is num) return v.toDouble();
+        final p = double.tryParse(v?.toString() ?? '');
+        if (p != null) return p;
+      }
+      return null;
+    }
     return SubjectScore(
-      subjectName: json['subjectName']?.toString() ?? '',
-      score: (json['score'] as num?)?.toDouble(),
-      fullScore: (json['fullScore'] as num?)?.toDouble(),
-      classAvg: (json['classAvg'] as num?)?.toDouble(),
-      gradeAvg: (json['gradeAvg'] as num?)?.toDouble(),
-      classRank: (json['classRank'] as num?)?.toDouble(),
-      gradeRank: (json['gradeRank'] as num?)?.toDouble(),
+      subjectName: _s(['km', 'subjectName', 'name', 'kmName']),
+      score: _d(['score', 'myScore', 'studentScore', 'mark']),
+      fullScore: _d(['fullScore', 'totalScore', 'fullMark', 'total']),
+      classAvg: _d(['classAvg', 'classAverage', 'avgClass', 'classAvgScore']),
+      gradeAvg: _d(['gradeAvg', 'gradeAverage', 'avgGrade', 'gradeAvgScore']),
+      classRank: _d(['classRank', 'classRanking', 'rankClass', 'classOrder']),
+      gradeRank: _d(['gradeRank', 'gradeRanking', 'rankGrade', 'gradeOrder']),
+      grade: _s(['grade', 'level', 'ratingLevel']).isNotEmpty ? _s(['grade', 'level', 'ratingLevel']) : null,
     );
   }
 }
