@@ -24,9 +24,25 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final schoolGuid = prefs.getString('schoolGuid');
     final grade = prefs.getString('grade');
-    if (schoolGuid != null && schoolGuid.isNotEmpty && grade != null && grade.isNotEmpty) {
-      _examService.setContext(schoolGuid: schoolGuid, grade: grade);
+    final ruCode = prefs.getString('ruCode');
+    _examService.setContext(schoolGuid: schoolGuid, grade: grade, ruCode: ruCode);
+  }
+
+  /// 业务上下文落盘 + 同步给 ExamService（登录/恢复/刷新统一走这里）
+  Future<void> _saveContext(UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    Future<void> put(String key, String? v) async {
+      if (v != null && v.isNotEmpty) await prefs.setString(key, v);
     }
+
+    await put('schoolGuid', user.schoolGuid);
+    await put('grade', user.grade);
+    await put('ruCode', user.ruCode);
+    _examService.setContext(
+      schoolGuid: user.schoolGuid,
+      grade: user.grade,
+      ruCode: user.ruCode,
+    );
   }
 
   /// 应用启动恢复会话：
@@ -54,16 +70,7 @@ class AuthProvider extends ChangeNotifier {
       final user = await _authService.getUserInfo();
       if (user != null) {
         _user = user;
-        // 保存 schoolGuid 和 grade 到 SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        if (user.schoolGuid != null && user.schoolGuid!.isNotEmpty) {
-          await prefs.setString('schoolGuid', user.schoolGuid!);
-        }
-        if (user.grade != null && user.grade!.isNotEmpty) {
-          await prefs.setString('grade', user.grade!);
-        }
-        // 更新 ExamService 上下文
-        _examService.setContext(schoolGuid: user.schoolGuid, grade: user.grade);
+        await _saveContext(user);
         notifyListeners();
       }
     } catch (_) {}
@@ -79,16 +86,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       if (user != null) {
         _user = user;
-        // 保存 schoolGuid 和 grade 到 SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        if (user.schoolGuid != null && user.schoolGuid!.isNotEmpty) {
-          await prefs.setString('schoolGuid', user.schoolGuid!);
-        }
-        if (user.grade != null && user.grade!.isNotEmpty) {
-          await prefs.setString('grade', user.grade!);
-        }
-        // 更新 ExamService 上下文
-        _examService.setContext(schoolGuid: user.schoolGuid, grade: user.grade);
+        await _saveContext(user);
         notifyListeners();
         return true;
       }
@@ -107,6 +105,7 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('schoolGuid');
     await prefs.remove('grade');
+    await prefs.remove('ruCode');
     notifyListeners();
   }
 

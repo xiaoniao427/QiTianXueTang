@@ -23,6 +23,7 @@ class _ExamListPageState extends State<ExamListPage> {
       context.read<ExamProvider>().updateContext(
             schoolGuid: user?.schoolGuid,
             grade: user?.grade,
+            ruCode: user?.ruCode,
           );
       final provider = context.read<ExamProvider>();
       if (user?.studentName != null) {
@@ -101,22 +102,35 @@ class _ExamCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              if (exam.examTime != null)
-                Text(
-                  '考试时间: ${exam.examTime}',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                ),
-              const SizedBox(height: 12),
-              if (exam.studentScore != null && exam.totalScore != null)
-                Row(
-                  children: [
-                    _ScoreChip(label: '得分', value: '${exam.studentScore!.toStringAsFixed(0)}/${exam.totalScore!.toStringAsFixed(0)}'),
-                    if (exam.classRank != null)
-                      _ScoreChip(label: '班级排名', value: exam.classRank!.toStringAsFixed(0)),
-                    if (exam.gradeRank != null)
-                      _ScoreChip(label: '年级排名', value: exam.gradeRank!.toStringAsFixed(0)),
+              Row(
+                children: [
+                  if (exam.status != null && exam.status!.isNotEmpty) ...[
+                    _Tag(text: exam.status!),
+                    const SizedBox(width: 8),
                   ],
-                ),
+                  if (exam.examTime != null && exam.examTime!.isNotEmpty)
+                    Text(
+                      exam.examTime!,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // 列表接口只返回总分(score)，无满分/排名，详情页才有
+              Row(
+                children: [
+                  _ScoreChip(
+                    label: '总分',
+                    value: exam.studentScore == null
+                        ? '-'
+                        : _fmt(exam.studentScore!),
+                  ),
+                  const Icon(Icons.chevron_right, color: AppTheme.textHint),
+                  const SizedBox(width: 4),
+                  const Text('查看各科成绩',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                ],
+              ),
             ],
           ),
         ),
@@ -145,3 +159,25 @@ class _ScoreChip extends StatelessWidget {
     );
   }
 }
+
+/// 考试类型标签（期中/月考…，对应列表接口的 type 字段）
+class _Tag extends StatelessWidget {
+  final String text;
+  const _Tag({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(text,
+          style: const TextStyle(fontSize: 11, color: AppTheme.primaryColor)),
+    );
+  }
+}
+
+/// 整数不带小数，非整数保留 1 位
+String _fmt(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);

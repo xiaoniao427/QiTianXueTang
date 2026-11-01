@@ -4,7 +4,8 @@ import 'logger.dart';
 
 /// 成绩服务
 /// ponytail: 依据真实抓包。列表用 szone-score/exam/getClaimExams (AES-ECB)，
-/// 需要 schoolGuid/grade/ruCode 上下文；详情(单科报告)属下一批(需请求侧AES-GCM加密)。
+/// 需要 schoolGuid/grade 上下文；详情用 Question/ScoreReport (请求侧 AES-GCM)，
+/// 额外还需 ruCode —— 缺它接口必空，见 ExamProvider.updateContext。
 class ExamService {
   final DioClient _client = DioClient();
   // 需要调用方先配置上下文(setContext后才有值)
@@ -79,54 +80,20 @@ class ExamService {
         return null;
       }
 
-      // 检查响应是否包含服务端错误（如 500）
-      if (raw['status'] == 500) {
-        logger.error('Exam', 'ScoreReport 服务端错误: ${raw['message']}');
+      // 解密后若无 km_info/km_list，说明业务未返回成绩（关闭查询/未发布等），
+      // 不要展示成"暂无数据"的空壳：直接判失败。
+      if (raw['km_list'] == null && raw['km_info'] == null) {
+        logger.error('Exam', 'ScoreReport 无成绩数据: ${raw.keys.toList()}');
         return null;
       }
 
-      logger.debug('Exam', 'ScoreReport 响应类型: ${raw.runtimeType}');
-      // raw 一定是 Map 类型（来自 _dataOf 返回）
-      logger.debug('Exam', 'ScoreReport JSON keys: ${raw.keys.toList()}');
-      final preview = raw.toString();
-      logger.debug('Exam', 'ScoreReport JSON preview: ${preview.length > 200 ? preview.substring(0, 200) : preview}');
-      // 用防御性映射解析：ScoreReport 响应含总分/各科/排名等
+      logger.debug('Exam', 'ScoreReport keys: ${raw.keys.toList()}');
       final exam = ExamModel.fromDetailJson(raw);
-      logger.debug('Exam', 'ScoreReport 解析后 exam: $exam');
-      logger.debug('Exam', 'examName=${exam.examName}, studentScore=${exam.studentScore}, subjects=${exam.subjects?.length}');
+      logger.debug('Exam',
+          'ScoreReport 解析: examName=${exam.examName}, 总分=${exam.studentScore}/${exam.totalScore}, 科目数=${exam.subjects?.length}');
       return exam;
     } catch (e) {
       logger.error('Exam', '获取考试详情失败: $e');
-      return null;
-    }
-  }
-
-  /// 获取单科列表（请求侧GCM加密）：POST Question/Subjects
-  Future<List<Map<String, dynamic>>?> getSubjectList(String examId) async {
-    try {
-      // 增加 ruCode 校验
-      if (schoolGuid.isEmpty || grade.isEmpty || ruCode.isEmpty) return null;
-      final raw = await _client.getSubjects(
-        examGuid: examId,
-        schoolGuid: schoolGuid,
-        grade: grade,
-        ruCode: ruCode,
-      );
-      if (raw == null) return null;
-      logger.debug('Exam', 'Subjects 原始数据: $raw');
-
-      // raw 结构约定为 { list: [...], exam_info: {...} }，将 list 解析为 List<Map<String,dynamic>>
-      final list = raw['list'];
-      if (list is List) {
-        return list.map<Map<String, dynamic>>((e) {
-          if (e is Map<String, dynamic>) return e;
-          if (e is Map) return Map<String, dynamic>.from(e);
-          return <String, dynamic>{};
-        }).toList();
-      }
-      return null;
-    } catch (e) {
-      logger.error('Exam', '获取单科列表失败', e);
       return null;
     }
   }

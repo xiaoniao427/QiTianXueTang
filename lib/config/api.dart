@@ -28,8 +28,7 @@ class ApiConfig {
   static const String examGetClaimExams = '/exam/getClaimExams';   // GET startIndex+rows+schoolGuid+grade, AES加密
   static const String examGetExamCount = '/exam/getExamCount';     // GET studentName+schoolGuid+grade, AES加密
   static const String entranceConfig = '/Entrance/Config';         // GET schoolGuid+grade+types, 明文
-  // 成绩详情（单科/整卷报告）：响应GCM加密，请求体也加密进 bp 头(bn=iv)
-  static const String questionSubjects = '/Question/Subjects';             // POST, 响应GCM
+  // 成绩详情（整卷报告）：响应GCM加密，请求体也加密进 bp 头(bn=iv)
   static const String questionScoreReport = '/Question/ScoreReport';       // POST, 响应GCM, bp=请求参数密文
   static const String questionAnswerCardUrl = '/Question/AnswerCardUrl';   // POST, 响应GCM
   static const String questionConclusion = '/Question/Conclusion';         // POST, 响应GCM

@@ -18,8 +18,9 @@ class ExamProvider extends ChangeNotifier {
   int get unClaimCount => _unClaimCount;
 
   /// 登录后/用户信息更新后配置业务上下文
-  void updateContext({String? schoolGuid, String? grade}) {
-    _examService.setContext(schoolGuid: schoolGuid, grade: grade);
+  /// ponytail: ruCode 必须一起传，否则 Question/* 详情接口一律返回 null
+  void updateContext({String? schoolGuid, String? grade, String? ruCode}) {
+    _examService.setContext(schoolGuid: schoolGuid, grade: grade, ruCode: ruCode);
   }
 
   Future<void> loadExams({int page = 1}) async {
@@ -38,7 +39,7 @@ class ExamProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 考试详情/学情报告：下一批实现
+  /// 考试详情：Question/ScoreReport（请求侧 GCM 加密）
   Future<void> loadExamDetail(String examId) async {
     _isLoading = true;
     notifyListeners();
@@ -46,16 +47,6 @@ class ExamProvider extends ChangeNotifier {
     _currentExam = exam;
     _isLoading = false;
     notifyListeners();
-  }
-
-  /// 获取单科列表
-  Future<List<Map<String, dynamic>>?> loadSubjectList(String examId) async {
-    _isLoading = true;
-    notifyListeners();
-    final list = await _examService.getSubjectList(examId);
-    _isLoading = false;
-    notifyListeners();
-    return list;
   }
 
   Future<void> loadStudyReport() async {}

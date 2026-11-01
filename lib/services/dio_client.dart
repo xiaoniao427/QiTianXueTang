@@ -490,6 +490,11 @@ class DioClient {
   }
 
   /// 成绩详情 (请求侧 GCM 加密): POST Question/ScoreReport
+  /// ponytail: 实测结论（2026-11-01 对线上接口逐项隔离验证）：
+  ///   1. 必须带 `bk` 头（会话密钥），否则 4033「参数校验失败」；
+  ///   2. 必须带 `User-Agent` 头，否则服务端 500 空引用异常。
+  ///      这是 BaseOptions 里的 UA 在兜底，勿删。
+  ///   3. 请求体是 `k=v` 用 `;` 拼接后整体 GCM 加密进 `bp`，iv 在 `bn`。
   Future<Map<String, dynamic>?> getScoreReport({
     required String examGuid,
     required String schoolGuid,
@@ -528,46 +533,6 @@ class DioClient {
       return d is Map ? d.cast<String, dynamic>() : null;
     } catch (e) {
       logger.error('HTTP', 'getScoreReport 失败', e);
-      return null;
-    }
-  }
-
-  /// 获取单科列表 (请求侧 GCM 加密): POST Question/Subjects
-  /// 官方 JS 实参: {examGuid, schoolGuid, grade:currentGrade, schoolRuCode:ruCode}
-  /// 返回完整结构 {list:[...], exam_info:{...}}
-  Future<Map<String, dynamic>?> getSubjects({
-    required String examGuid,
-    required String schoolGuid,
-    required String grade,
-    required String ruCode,
-  }) async {
-    try {
-      await _ensureSessionKey();
-
-      final iv = SecureCrypto.generateIv();
-      final ivBytes = base64.decode(iv);
-
-      final pairs = [
-        'examGuid=$examGuid',
-        'schoolGuid=$schoolGuid',
-        'grade=$grade',
-        'schoolRuCode=$ruCode',
-      ];
-      logger.debug('HTTP', 'Subjects bp 明文: ${pairs.join(';')}');
-      final bp = SecureCrypto.aesGcmEncrypt(pairs.join(';'), ivBytes);
-
-      final resp = await _dio.post(
-        '${ApiConfig.baseScore}${ApiConfig.questionSubjects}',
-        options: Options(headers: {
-          'bn': iv,
-          'bp': bp,
-        }),
-      );
-      final d = _dataOf(resp.data);
-      logger.debug('HTTP', 'Subjects 解析后: $d');
-      return d is Map ? d.cast<String, dynamic>() : null;
-    } catch (e) {
-      logger.error('HTTP', 'getSubjects 失败', e);
       return null;
     }
   }
