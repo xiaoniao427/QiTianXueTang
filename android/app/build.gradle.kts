@@ -10,17 +10,6 @@ android {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
-    // Produce one APK per CPU architecture instead of bundling every native
-    // Flutter engine/plugin library into a single, larger universal APK.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = false
-        }
-    }
-
     signingConfigs {
         create("debugFixed") {
             storeFile = file("mykey.jks")
