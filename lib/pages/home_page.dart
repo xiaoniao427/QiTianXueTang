@@ -4,16 +4,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/home_provider.dart';
-import '../services/home_service.dart';
 import 'exam/exam_list_page.dart';
-import 'course/course_list_page.dart';
 import 'profile/profile_page.dart';
 
 /// 安全取首字符
 String _firstChar(String? s) =>
     (s == null || s.isEmpty) ? '?' : s.substring(0, 1);
 
-/// 主界面：底部 4 个 tab（首页 / 考试 / 课程 / 我的）
+/// 主界面：底部 3 个已实现的 Tab（首页 / 考试 / 我的）
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -27,7 +25,6 @@ class _HomePageState extends State<HomePage> {
   static const _tabs = <Widget>[
     _HomeTab(),
     ExamListPage(),
-    CourseListPage(),
     ProfilePage(),
   ];
 
@@ -41,7 +38,6 @@ class _HomePageState extends State<HomePage> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: '首页'),
           BottomNavigationBarItem(icon: Icon(Icons.assignment), label: '考试'),
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: '课程'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: '我的'),
         ],
       ),
@@ -49,7 +45,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-/// 首页 Tab：用户信息 + 宫格导航 + 板块 + 学情/消息
+/// 首页 Tab：用户信息 + 学情/消息
 class _HomeTab extends StatefulWidget {
   const _HomeTab();
 
@@ -84,7 +80,7 @@ class _HomeTabState extends State<_HomeTab> {
           Stack(children: [
             IconButton(
               icon: const Icon(Icons.notifications_none),
-              onPressed: () => _switchTo(context, 3),
+              onPressed: () => _switchTo(context, 2),
             ),
             if (home.noReadMessage > 0)
               Positioned(
@@ -111,12 +107,8 @@ class _HomeTabState extends State<_HomeTab> {
           padding: const EdgeInsets.all(16),
           children: [
             _buildUserCard(user?.nickname, user?.phone, user?.avatar,
-                onTap: () => _switchTo(context, 3)),
+                onTap: () => _switchTo(context, 2)),
             const SizedBox(height: 16),
-            if (home.navs.isNotEmpty) ...[
-              _buildNavGrid(home.navs),
-              const SizedBox(height: 16),
-            ],
             // 学情数据条
             if (home.studyTotalHour.isNotEmpty ||
                 home.collectionQuantity > 0) ...[
@@ -134,31 +126,6 @@ class _HomeTabState extends State<_HomeTab> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildNavGrid(List<NavItem> navs) {
-    final cells = <Widget>[
-      _QuickAction(icon: Icons.assignment, label: '考试成绩',
-          onTap: () => _switchTo(context, 1)),
-      _QuickAction(icon: Icons.menu_book, label: '精品课程',
-          onTap: () => _switchTo(context, 2)),
-    ];
-    for (final n in navs) {
-      if (cells.length >= 6) break;
-      cells.add(_QuickAction(icon: Icons.grid_view,
-          label: n.name.isNotEmpty ? n.name : '入口',
-          onTap: n.linkUrl.contains('coursezone')
-              ? () => _switchTo(context, 2)
-              : () {}));
-    }
-    return GridView.count(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      crossAxisCount: 4,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      children: cells,
     );
   }
 
@@ -267,37 +234,5 @@ class _HomeTabState extends State<_HomeTab> {
   void _switchTo(BuildContext context, int index) {
     final h = context.findAncestorStateOfType<_HomePageState>();
     h?.setState(() => h._currentIndex = index);
-  }
-}
-
-
-/// 快捷功能入口
-class _QuickAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _QuickAction({
-      required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-            child: Icon(icon, color: AppTheme.primaryColor),
-          ),
-          const SizedBox(height: 8),
-          Text(label,
-              style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary)),
-        ],
-      ),
-    );
   }
 }

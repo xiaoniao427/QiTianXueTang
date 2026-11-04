@@ -52,21 +52,12 @@ class ProfilePage extends StatelessWidget {
                       ),
                     ),
                     const Icon(Icons.chevron_right),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-        ),
           const SizedBox(height: 16),
-
-          // 功能菜单
-          _buildMenuItem(Icons.assignment, '考试记录', () {}),
-          _buildMenuItem(Icons.analytics, '学情报告', () {}),
-          _buildMenuItem(Icons.auto_awesome, 'AI诊断', () {}),
-          _buildMenuItem(Icons.star, '我的收藏', () {}),
-          _buildMenuItem(Icons.help_outline, '帮助中心', () {}),
-          _buildMenuItem(Icons.settings_outlined, '设置', () {}),
-          const Divider(height: 32),
           _buildMenuItem(Icons.logout, '退出登录', () => _logout(context), color: AppTheme.errorColor),
         ],
       ),
@@ -111,6 +102,7 @@ class ProfilePage extends StatelessWidget {
         }
       }
     }
+    controller.dispose();
   }
 
   Future<void> _logout(BuildContext context) async {
