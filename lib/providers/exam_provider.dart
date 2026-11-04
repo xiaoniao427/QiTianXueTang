@@ -1,24 +1,21 @@
 import 'package:flutter/foundation.dart';
 import '../models/exam_model.dart';
-import '../models/study_report_model.dart';
 import '../services/exam_service.dart';
 
 class ExamProvider extends ChangeNotifier {
   final ExamService _examService = ExamService();
   List<ExamModel> _exams = [];
   ExamModel? _currentExam;
-  StudyReportModel? _studyReport;
   bool _isLoading = false;
   int _unClaimCount = 0;
 
   List<ExamModel> get exams => _exams;
   ExamModel? get currentExam => _currentExam;
-  StudyReportModel? get studyReport => _studyReport;
   bool get isLoading => _isLoading;
   int get unClaimCount => _unClaimCount;
 
-  /// 登录后/用户信息更新后配置业务上下文
-  /// ponytail: ruCode 必须一起传，否则 Question/* 详情接口一律返回 null
+  /// 登录后/用户信息更新后配置业务上下文。
+  /// ruCode 必须一起传，否则 Question/* 详情接口会返回空数据。
   void updateContext({String? schoolGuid, String? grade, String? ruCode}) {
     _examService.setContext(schoolGuid: schoolGuid, grade: grade, ruCode: ruCode);
   }
@@ -34,12 +31,12 @@ class ExamProvider extends ChangeNotifier {
   }
 
   Future<void> loadUnClaimCount(String studentName) async {
-    final c = await _examService.getUnClaimCount(studentName: studentName);
-    _unClaimCount = c;
+    final count = await _examService.getUnClaimCount(studentName: studentName);
+    _unClaimCount = count;
     notifyListeners();
   }
 
-  /// 考试详情：Question/ScoreReport（请求侧 GCM 加密）
+  /// 加载考试详情（Question/ScoreReport，请求侧 GCM 加密）
   Future<void> loadExamDetail(String examId) async {
     _isLoading = true;
     notifyListeners();
@@ -48,6 +45,4 @@ class ExamProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
   }
-
-  Future<void> loadStudyReport() async {}
 }

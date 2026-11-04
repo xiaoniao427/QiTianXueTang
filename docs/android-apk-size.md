@@ -20,7 +20,7 @@ flutter build apk --release --split-per-abi
 
 ## Google Play 发布
 
-应用商店发布建议使用 Android App Bundle，由 Google Play 根据设备生成只含所需 ABI 等资源的安装包：
+应用商店发布建议使用 Android App Bundle，由 Google Play 根据设备生成只含所需 ABI 等资源��安装包：
 
 ```bash
 flutter build appbundle --release
@@ -33,4 +33,4 @@ flutter build appbundle --release
 - 必须使用 `--release`；Debug APK 仅用于开发调试，不应作为发布包比较或分发。
 - 不要只构建 `arm64-v8a` 后面向所有设备分发，否则不支持 64 位 ARM 的设备将无法安装。若只面向已确认的 arm64 设备，可以使用 `flutter build apk --release --target-platform android-arm64` 构建单架构包。
 - 本仓库的 `android/app/build.gradle.kts` 未配置 ABI 限制；通过 Flutter 的 `--split-per-abi` 按需拆包，避免把特定架构限制写入所有构建。
-- 当前 `assets/images/` 仅有一个很小的占位图，图片资源不是明显的体积来源。若仍需继续优化，先用 Android Studio APK Analyzer 检查 release APK 中各 ABI 的 `.so`、资源及依赖占比，再决定是否移除未用依赖；不要未经验证开启 R8/资源压缩，以免影响插件功能。
+- 如需继续优化，先用 Android Studio APK Analyzer 检查 release APK 中各 ABI 的 `.so`、资源及依赖占比，再决定是否移除未使用依赖；不要未经验证开启 R8/资源压缩，以免影响插件功能。
